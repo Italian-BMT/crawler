@@ -9,6 +9,8 @@ from selenium.webdriver.support import expected_conditions as EC
 from time import sleep
 import json
 
+from datetime import datetime
+
 # 라인, 역이름, 네이버코드 불러오기
 with open('subway_information.json', 'r', encoding='utf-8') as f:
     # Load the contents of the file as a Python object
@@ -55,7 +57,8 @@ def crawler(target_line, station_nm, driver):
 
 # 크롤링을 위한 설정 준비
 service = Service('/Users/gyum/Downloads/chromedriver')
-options = webdriver.ChromeOptions().add_argument('headless')    # chrome 창 안 띄우고 실행
+options = webdriver.ChromeOptions()
+options.add_argument('headless')    # chrome 창 안 띄우고 실행
 base_url = 'https://pts.map.naver.com/end-subway/ends/web/{naver_code}/home'
 
 
@@ -65,6 +68,8 @@ print("target_lines: ",target_lines)
 
 # 각 역별 시간표 저장해줄 info 리스트 생성
 info = []
+# 파일 이름에 사용할 날짜 문자 생성
+now = datetime.now().strftime('%Y_%m_%d')
 
 # 각 호선 -> 각 역 별로 for loop 돌며 크롤링
 for target_line in target_lines:
@@ -88,9 +93,10 @@ for target_line in target_lines:
 
     # open을 w로 할지 a로 할지 / a로 하면 기존 데이터와 새로 쓰이는 데이터가 [][] 이런 식으로 묶이는데
     # 차라리 파일을 생성 -> s3로 데이터 전송하고 -> 덮어씌우기 이런 방식으로 진행? 아 날짜를 입력하면 되는구나
-    with open(f'timetable_{target_line}.json', 'w', encoding='utf-8') as f:
+
+    with open(f'{now}_timetable_{target_line}.json', 'w', encoding='utf-8') as f:
         json.dump(info, f, ensure_ascii=False, indent=4)
-    print(target_line, "입력 완료")
+    # print(target_line, "입력 완료")
     
 
 
