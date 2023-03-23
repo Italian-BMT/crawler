@@ -6,10 +6,14 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.options import Options
 from time import sleep
 import json
-
 from datetime import datetime
+import boto3
+from dotenv import load_dotenv
+import os
+
 
 # 라인, 역이름, 네이버코드 불러오기
 with open('subway_information.json', 'r', encoding='utf-8') as f:
@@ -17,10 +21,28 @@ with open('subway_information.json', 'r', encoding='utf-8') as f:
     data = json.load(f)
 
 
+#S3 연결 
+def conn_s3_bucket():
+    # load .env
+    load_dotenv()
+    
+    AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_MKEY_ID")
+    AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
+    
+    s3 = boto3.client(
+        's3',
+        aws_access_key_id=AWS_ACCESS_KEY_ID, # IAM 사용자 access_key_id
+        aws_secret_access_key=AWS_SECRET_ACCESS_KEY # IAM 사용자 secret_access_key
+    )
+    
+    return s3
+
+# 크롤러
 def crawler(target_line, station_nm, driver):
     html = driver.page_source
     soup = BeautifulSoup(html, 'html.parser')
-
+    week_tag = 1    # week_tag 초기화
+    
     # week_tag 알아내기 (평일, 토요일, 공휴일&일요일)
     day = soup.find(attrs={"aria-selected" : "true"}).get_text()
     if day == '평일':
@@ -57,8 +79,8 @@ def crawler(target_line, station_nm, driver):
 
 # 크롤링을 위한 설정 준비
 service = Service('/Users/gyum/Downloads/chromedriver')
-options = webdriver.ChromeOptions()
-options.add_argument('headless')    # chrome 창 안 띄우고 실행
+chrome_options = Options()
+chrome_options.headless = True
 base_url = 'https://pts.map.naver.com/end-subway/ends/web/{naver_code}/home'
 
 
@@ -68,19 +90,20 @@ print("target_lines: ",target_lines)
 
 # 각 역별 시간표 저장해줄 info 리스트 생성
 info = []
-# 파일 이름에 사용할 날짜 문자 생성
+
+# 현재 날짜 now에 저장
 now = datetime.now().strftime('%Y_%m_%d')
 
 # 각 호선 -> 각 역 별로 for loop 돌며 크롤링
 for target_line in target_lines:
-    # print(target_line, "입력 시작")
+    print(target_line, "입력 시작")
     for tmp in data[target_line]:
         station_nm = tmp['station_nm']
         naver_code = tmp['naver_code']
         # print("station_nm: ", station_nm, "naver_code: ", naver_code)
         # 크롤링할 역 검색
         url = base_url.format(naver_code=naver_code)
-        driver = webdriver.Chrome(service=service, options=options)
+        driver = webdriver.Chrome(service=service, options=chrome_options)
         driver.implicitly_wait(4)
 
         # naver map 검색 결과로 들어가기
@@ -90,13 +113,20 @@ for target_line in target_lines:
 
         # 전체 시간표 부분 접속 완료 후 크롤링 시작
         crawler(target_line, station_nm, driver)
-
+        
     # open을 w로 할지 a로 할지 / a로 하면 기존 데이터와 새로 쓰이는 데이터가 [][] 이런 식으로 묶이는데
     # 차라리 파일을 생성 -> s3로 데이터 전송하고 -> 덮어씌우기 이런 방식으로 진행? 아 날짜를 입력하면 되는구나
-
-    with open(f'{now}_timetable_{target_line}.json', 'w', encoding='utf-8') as f:
-        json.dump(info, f, ensure_ascii=False, indent=4)
-    # print(target_line, "입력 완료")
     
-
-
+    local_file_name = f'{now}_timetable_{target_line}.json'
+    
+    with open(local_file_name, 'w', encoding='utf-8') as f:
+        json.dump(info, f, ensure_ascii=False, indent=4)
+    print(target_line, "입력 완료")
+    
+    # S3 연동
+    s3 = conn_s3_bucket()   # s3 버킷에 연결
+    # s3에 json 파일 업로드
+    with open(local_file_name, "rb") as f:
+        s3.upload_fileobj(f, "subway-timetables", local_file_name)
+    print(f's3에 {target_line} 업로드 완료')
+    
