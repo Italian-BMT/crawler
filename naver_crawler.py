@@ -63,7 +63,7 @@ base_url = 'https://pts.map.naver.com/end-subway/ends/web/{naver_code}/home'
 
 
 # 크롤링할 호선 정리하기
-target_lines = data.keys() - ["1호선", "2호선", "3호선", "4호선", "5호선", "6호선", "7호선", "8호선", "9호선"]
+target_lines = data.keys()
 print("target_lines: ",target_lines)
 
 # 각 역별 시간표 저장해줄 info 리스트 생성
@@ -90,12 +90,12 @@ for target_line in target_lines:
 
         # 전체 시간표 부분 접속 완료 후 크롤링 시작
         crawler(target_line, station_nm, driver)
-
-    # open을 w로 할지 a로 할지 / a로 하면 기존 데이터와 새로 쓰이는 데이터가 [][] 이런 식으로 묶이는데
-    # 차라리 파일을 생성 -> s3로 데이터 전송하고 -> 덮어씌우기 이런 방식으로 진행? 아 날짜를 입력하면 되는구나
-
+        
     with open(f'{now}_timetable_{target_line}.json', 'w', encoding='utf-8') as f:
-        json.dump(info, f, ensure_ascii=False, indent=4)
+        for line in info:
+            json.dump(line, f, ensure_ascii=False)
+            f.write('\n')
+    print(target_line, "입력 완료")
     # print(target_line, "입력 완료")
     
 
